@@ -1,105 +1,106 @@
 #include <Arduino.h>
 
 // Pin Definitions
-#define TRIG_PIN     9           // Ultrasonic sensor TRIG pin
-#define ECHO_PIN     8           // Ultrasonic sensor ECHO pin
-#define CO2_SENSOR   A0          // CO₂ gas sensor (MG-811)
-#define TEMP_SENSOR  A1          // Temperature sensor (LM35)
-#define SO2_SENSOR   A2          // SO₂ gas sensor (MQ-136)
-#define PIR_SENSOR   7           // Motion sensor for human detection
-#define BUZZER_PIN   6           // Audible alarm output
-#define LED_PIN      5           // Visual alert indicator (LED)
-#define IN1          2           // Motor control pin 1
-#define IN2          3           // Motor control pin 2
-#define IN3          4           // Motor control pin 3
-#define IN4          10          // Motor control pin 4
+#define TRIG1_PIN     9           // Ultrasonic sensor 1 TRIG pin
+#define ECHO1_PIN     8           // Ultrasonic sensor 1 ECHO pin
+#define TRIG2_PIN     12          // Ultrasonic sensor 2 TRIG pin (new)
+#define ECHO2_PIN     11          // Ultrasonic sensor 2 ECHO pin (new)
+#define MQ2_SENSOR    A0          // MQ-2 Gas sensor
+#define TEMP_SENSOR   A1          // Temperature sensor (LM35)
+#define PIR_SENSOR    7           // Motion sensor
+#define BUZZER_PIN    6           // Alarm buzzer
+#define RED_PIN       3           // RGB LED Red
+#define GREEN_PIN     4           // RGB LED Green
+#define BLUE_PIN      5           // RGB LED Blue
+#define IN1           2           // Motor driver pin
+#define IN2           13          // Motor driver pin
+#define IN3           A2          // Motor driver pin
+#define IN4           A3          // Motor driver pin
 
-// Thresholds (Can be calibrated later)
-#define TEMP_THRESHOLD_LOW   36.5   // Minimum human body temperature (°C)
-#define TEMP_THRESHOLD_HIGH  42.0   // Maximum safe human body temperature (°C)
-#define CO2_THRESHOLD        600    // CO₂ gas level threshold (analog units)
-#define SO2_THRESHOLD        700    // SO₂ gas level threshold (analog units)
-#define DIST_THRESHOLD_CM    20     // Safe distance from obstacles (cm)
+// Thresholds
+#define TEMP_THRESHOLD_LOW   36.5
+#define TEMP_THRESHOLD_HIGH  42.0
+#define GAS_THRESHOLD        450   // MQ-2 analog value (adjustable)
+#define DIST_THRESHOLD_CM    20
 
 // Timing Variables
-unsigned long motionLastDetected = 0;            // Timestamp of last detected motion
-const unsigned long humanSearchDuration = 5000;  // Keep moving for 5s after losing motion
+unsigned long motionLastDetected = 0;
+const unsigned long humanSearchDuration = 5000;
 
 // Function Declarations
-float getDistance(void);            // Measures distance using ultrasonic sensor
-float getTemperature(void);         // Reads temperature from LM35
-void stopMoving(void);              // Stops robot motors
-void moveForward(void);             // Moves robot forward
-void moveBackward(void);            // Moves robot backward
-void moveTowardHuman(void);         // Approaches detected human
-void alert(void);                   // Activates buzzer and LED for alert
-void checkForGas(void);             // Detects CO₂ and SO₂ levels
-void checkForHumanPresence(void);   // Detects motion and verifies temperature
+float getDistance(uint8_t trigPin, uint8_t echoPin);
+float getTemperature();
+void stopMoving();
+void moveForward();
+void moveBackward();
+void moveTowardHuman();
+void alert();
+void checkForGas();
+void checkForHumanPresence();
 
 void setup() {
     Serial.begin(9600);
 
-    // Sensor input pins
-    pinMode(TRIG_PIN, OUTPUT);
-    pinMode(ECHO_PIN, INPUT);
-    pinMode(CO2_SENSOR, INPUT);
-    pinMode(SO2_SENSOR, INPUT);
-    pinMode(PIR_SENSOR, INPUT);
+    pinMode(TRIG1_PIN, OUTPUT);
+    pinMode(ECHO1_PIN, INPUT);
+    pinMode(TRIG2_PIN, OUTPUT);
+    pinMode(ECHO2_PIN, INPUT);
+    pinMode(MQ2_SENSOR, INPUT);
     pinMode(TEMP_SENSOR, INPUT);
+    pinMode(PIR_SENSOR, INPUT);
 
-    // Output pins
     pinMode(BUZZER_PIN, OUTPUT);
-    pinMode(LED_PIN, OUTPUT);
+    pinMode(RED_PIN, OUTPUT);
+    pinMode(GREEN_PIN, OUTPUT);
+    pinMode(BLUE_PIN, OUTPUT);
+
     pinMode(IN1, OUTPUT);
     pinMode(IN2, OUTPUT);
     pinMode(IN3, OUTPUT);
     pinMode(IN4, OUTPUT);
 
-    // Initialize alerts to OFF
     digitalWrite(BUZZER_PIN, LOW);
-    digitalWrite(LED_PIN, LOW);
+    analogWrite(RED_PIN, 0);
+    analogWrite(GREEN_PIN, 0);
+    analogWrite(BLUE_PIN, 0);
 }
 
 void loop() {
-    float distance = getDistance();
+    float distance1 = getDistance(TRIG1_PIN, ECHO1_PIN);
+    float distance2 = getDistance(TRIG2_PIN, ECHO2_PIN);
 
-    // Obstacle avoidance check
-    if (distance < DIST_THRESHOLD_CM) {
+    if (distance1 < DIST_THRESHOLD_CM || distance2 < DIST_THRESHOLD_CM) {
         Serial.println("Obstacle detected! Reversing...");
         stopMoving();
         delay(300);
-        moveBackward();       // Move back briefly to avoid
+        moveBackward();
         delay(800);
         stopMoving();
     } else {
-        moveForward();        // Path is clear
+        moveForward();
     }
 
     checkForGas();
     checkForHumanPresence();
-
-    delay(100); // Small delay for sensor stability
+    delay(100);
 }
 
-// Measure distance using ultrasonic sensor
-float getDistance() {
-    digitalWrite(TRIG_PIN, LOW);
+float getDistance(uint8_t trigPin, uint8_t echoPin) {
+    digitalWrite(trigPin, LOW);
     delayMicroseconds(2);
-    digitalWrite(TRIG_PIN, HIGH);
+    digitalWrite(trigPin, HIGH);
     delayMicroseconds(10);
-    digitalWrite(TRIG_PIN, LOW);
-    long duration = pulseIn(ECHO_PIN, HIGH);
-    return duration * 0.034 / 2;  // Convert duration to cm
+    digitalWrite(trigPin, LOW);
+    long duration = pulseIn(echoPin, HIGH);
+    return duration * 0.034 / 2;
 }
 
-// Read temperature from LM35 sensor
 float getTemperature() {
     int value = analogRead(TEMP_SENSOR);
     float voltage = value * 5.0 / 1023.0;
-    return voltage * 100.0; // Convert voltage to °C
+    return voltage * 100.0;
 }
 
-// Moves the robot forward
 void moveForward() {
     digitalWrite(IN1, HIGH);
     digitalWrite(IN2, LOW);
@@ -107,7 +108,6 @@ void moveForward() {
     digitalWrite(IN4, LOW);
 }
 
-// Moves the robot backward
 void moveBackward() {
     digitalWrite(IN1, LOW);
     digitalWrite(IN2, HIGH);
@@ -115,7 +115,6 @@ void moveBackward() {
     digitalWrite(IN4, HIGH);
 }
 
-// Stop all motors
 void stopMoving() {
     digitalWrite(IN1, LOW);
     digitalWrite(IN2, LOW);
@@ -123,54 +122,36 @@ void stopMoving() {
     digitalWrite(IN4, LOW);
 }
 
-// Move briefly toward detected motion
 void moveTowardHuman() {
     Serial.println("Moving toward human...");
     moveForward();
-    delay(1000); // Move forward for 1 second
+    delay(1000);
     stopMoving();
 }
 
-// Activate LED and buzzer in alert pattern
 void alert() {
     for (int i = 0; i < 3; i++) {
         digitalWrite(BUZZER_PIN, HIGH);
-        digitalWrite(LED_PIN, HIGH);
+        analogWrite(RED_PIN, 255);
+        analogWrite(GREEN_PIN, 0);
+        analogWrite(BLUE_PIN, 0);
         delay(300);
         digitalWrite(BUZZER_PIN, LOW);
-        digitalWrite(LED_PIN, LOW);
+        analogWrite(RED_PIN, 0);
         delay(200);
     }
 }
 
-// Differentiating CO₂ and SO₂ gases using two sensors
 void checkForGas() {
-    int co2Value = analogRead(CO2_SENSOR);
-    int so2Value = analogRead(SO2_SENSOR);
-
-    Serial.print("CO₂ Reading: ");
-    Serial.println(co2Value);
-    Serial.print("SO₂ Reading: ");
-    Serial.println(so2Value);
-
-    bool gasAlert = false;
-
-    if (co2Value > CO2_THRESHOLD) {
-        Serial.println("High CO₂ concentration detected!");
-        gasAlert = true;
-    }
-
-    if (so2Value > SO2_THRESHOLD) {
-        Serial.println("High SO₂ concentration detected!");
-        gasAlert = true;
-    }
-
-    if (gasAlert) {
-        alert(); // Trigger warning if any gas exceeds safe threshold
+    int gasVal = analogRead(MQ2_SENSOR);
+    Serial.print("MQ-2 Gas Reading: ");
+    Serial.println(gasVal);
+    if (gasVal > GAS_THRESHOLD) {
+        Serial.println("High gas concentration detected!");
+        alert();
     }
 }
 
-// Detects motion and verifies if it’s a human based on body temp
 void checkForHumanPresence() {
     int motion = digitalRead(PIR_SENSOR);
     float temperature = getTemperature();
@@ -178,17 +159,16 @@ void checkForHumanPresence() {
     if (motion == HIGH) {
         Serial.println("Motion detected!");
         moveTowardHuman();
-        motionLastDetected = millis(); // Reset the human search timer
+        motionLastDetected = millis();
 
         if (temperature >= TEMP_THRESHOLD_LOW && temperature <= TEMP_THRESHOLD_HIGH) {
             Serial.println("Valid human body temperature detected!");
-            alert(); // Person might need help or attention
+            alert();
         } else {
             Serial.println("No valid body heat. Could be a false trigger.");
         }
     }
 
-    // Resume normal patrol if no motion recently
     if (millis() - motionLastDetected > humanSearchDuration) {
         moveForward();
     }
